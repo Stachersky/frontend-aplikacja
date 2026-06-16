@@ -1,10 +1,19 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './index.css'
-import App from './App.jsx'
+import React from "react"
+import ReactDOM from "react-dom/client"
+import App from "./App.jsx"
+import axios from "axios" // DODAJ IMPORT AXIOS
 
-createRoot(document.getElementById('root')).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
+// MAGIA: Zawsze doklejaj token do nagłówka zapytania, jeśli istnieje!
+axios.interceptors.request.use(config => {
+	const token = localStorage.getItem("token")
+	if (token) {
+		config.headers.Authorization = `Bearer ${token}`
+	}
+	return config
+})
+
+ReactDOM.createRoot(document.getElementById("root")).render(
+	<React.StrictMode>
+		<App />
+	</React.StrictMode>,
 )

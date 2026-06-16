@@ -7,12 +7,10 @@ function PanelKlienta() {
 	const [plany, setPlany] = useState([])
 	const [komunikat, setKomunikat] = useState("")
 
-	// NOWE STANY DO FORMULARZA WYNIKÓW
 	const [sessionId, setSessionId] = useState("")
 	const [czas, setCzas] = useState("")
 	const [kcal, setKcal] = useState("")
 
-	// STANY DO KALKULATORA 1RM
 	const [ciezar, setCiezar] = useState("")
 	const [powtorzenia, setPowtorzenia] = useState("")
 	const [wynik1RM, setWynik1RM] = useState(null)
@@ -20,10 +18,17 @@ function PanelKlienta() {
 	const navigate = useNavigate()
 	const userId = localStorage.getItem("userId")
 	const isKarnetAktywny = localStorage.getItem("maAktywnyKarnet") === "true"
+
 	const [widok, setWidok] = useState(isKarnetAktywny ? "moje" : "sklep")
+
 	const [zajeciaList, setZajeciaList] = useState([])
+	const [mojeZajecia, setMojeZajecia] = useState([]) // NOWE: Stan na zarezerwowane zajęcia
+
+	const [trenerzyList, setTrenerzyList] = useState([])
+	const [mojeTreningi, setMojeTreningi] = useState([])
 
 	const [czyWszedlNaSilownie, setCzyWszedlNaSilownie] = useState(false)
+
 	useEffect(() => {
 		if (!userId) {
 			navigate("/login")
@@ -31,53 +36,101 @@ function PanelKlienta() {
 		}
 
 		if (widok === "grafik") {
-			const fetchZajecia = async () => {
-				try {
-					const response = await axios.get(
-						"http://localhost:8080/api/zajecia/grafik",
-					)
-					setZajeciaList(response.data)
-				} catch (error) {
-					setKomunikat("❌ Nie udało się pobrać grafiku zajęć.")
-				}
-			}
-			fetchZajecia()
+			pobierzGrafikZajec()
+			if (isKarnetAktywny) pobierzMojeZajecia()
+		}
+
+		if (widok === "trenerzy" && isKarnetAktywny) {
+			pobierzWolnychTrenerow()
+			pobierzMojeTreningi()
 		}
 
 		if (widok === "moje" && isKarnetAktywny) {
-			const fetchPlany = async () => {
-				try {
-					setKomunikat("⏳ Ładowanie...")
-					const response = await axios.get(
-						`http://localhost:5158/api/Workouts/plans/${userId}`,
-					)
-					setPlany(response.data)
+			axios
+				.get(`http://localhost:5158/api/Workouts/plans/${userId}`)
+				.then(res => {
+					setPlany(res.data)
 					setKomunikat("")
-				} catch (error) {
-					if (error.response && error.response.status === 404) {
-						setKomunikat(
-							'Nie masz jeszcze aktywnych planów. Przejdź do zakładki "Sklep", aby coś wybrać!',
-						)
-					} else {
-						setKomunikat("❌ Błąd połączenia z serwerem planów.")
-					}
-				}
-			}
-			fetchPlany()
-		}
-
-		const rezerwujZajecia = async idZajec => {
-			try {
-				const response = await axios.post(
-					`http://localhost:8080/api/zajecia/${idZajec}/rezerwuj?uzytkownikId=${userId}`,
-				)
-				setKomunikat(response.data)
-			} catch (error) {
-				setKomunikat("❌ Błąd rezerwacji.")
-			}
+				})
+				.catch(err => {
+					if (err.response?.status === 404)
+						setKomunikat("Nie masz planów. Przejdź do Sklepu.")
+				})
 		}
 	}, [widok, userId, isKarnetAktywny, navigate])
 
+	// --- FUNKCJE DLA HARMONOGRAMU (1 na 1) ---
+	const pobierzWolnychTrenerow = async () => {
+		try {
+			const response = await axios.get(
+				"http://localhost:8080/api/harmonogram/wolne",
+			)
+			setTrenerzyList(response.data)
+		} catch (error) {
+			setKomunikat("❌ Błąd pobierania wolnych trenerów.")
+		}
+	}
+
+	const pobierzMojeTreningi = async () => {
+		try {
+			const response = await axios.get(
+				`http://localhost:8080/api/harmonogram/klient/${userId}`,
+			)
+			setMojeTreningi(response.data)
+		} catch (error) {
+			console.error("Błąd pobierania moich treningów", error)
+		}
+	}
+
+	const rezerwujTrenera = async treningId => {
+		try {
+			const response = await axios.post(
+				`http://localhost:8080/api/harmonogram/${treningId}/rezerwuj?klientId=${userId}`,
+			)
+			setKomunikat(response.data)
+			pobierzWolnychTrenerow()
+			pobierzMojeTreningi()
+		} catch (error) {
+			setKomunikat("❌ Błąd rezerwacji.")
+		}
+	}
+
+	// --- FUNKCJE DLA ZAJĘĆ GRUPOWYCH ---
+	const pobierzGrafikZajec = async () => {
+		try {
+			const response = await axios.get(
+				"http://localhost:8080/api/zajecia/grafik",
+			)
+			setZajeciaList(response.data)
+		} catch (error) {
+			setKomunikat("❌ Błąd pobierania grafiku zajęć.")
+		}
+	}
+
+	const pobierzMojeZajecia = async () => {
+		try {
+			const response = await axios.get(
+				`http://localhost:8080/api/zajecia/klient/${userId}`,
+			)
+			setMojeZajecia(response.data)
+		} catch (error) {
+			console.error("Błąd pobierania moich zajęć", error)
+		}
+	}
+
+	const rezerwujZajecia = async idZajec => {
+		try {
+			const response = await axios.post(
+				`http://localhost:8080/api/zajecia/${idZajec}/rezerwuj?uzytkownikId=${userId}`,
+			)
+			setKomunikat(response.data)
+			pobierzMojeZajecia() // Od razu odświeżamy listę potwierdzonych zapisów!
+		} catch (error) {
+			setKomunikat("❌ Błąd rezerwacji zajęć grupowych.")
+		}
+	}
+
+	// --- POZOSTAŁE FUNKCJE (BRAMKA, WYNIKI, SKLEP) ---
 	const handleLogout = () => {
 		localStorage.clear()
 		navigate("/login")
@@ -85,112 +138,84 @@ function PanelKlienta() {
 
 	const symulujWejscieQR = async () => {
 		try {
-			setKomunikat("⏳ Skanowanie kodu QR na bramce...")
+			setKomunikat("⏳ Skanowanie...")
 			const response = await axios.post(
 				`http://localhost:8080/api/access/checkin?uzytkownikId=${userId}`,
 			)
 			setKomunikat("✅ " + response.data)
-
-			// ODBLOKOWUJEMY OKIENKA TRENINGOWE!
 			setCzyWszedlNaSilownie(true)
 		} catch (error) {
-			if (error.response && error.response.data) {
-				setKomunikat(
-					`❌ Bramka zamknięta: ${error.response.data.message || error.response.data}`,
-				)
-			} else {
-				setKomunikat("❌ Błąd skanera QR. Sprawdź połączenie z serwerem Javy.")
-			}
+			setKomunikat("❌ Bramka zamknięta / Błąd skanera.")
 		}
 	}
 
-	// NOWA FUNKCJA: WYSYŁANIE WYNIKÓW
 	const zakonczTrening = async e => {
 		e.preventDefault()
 		try {
-			setKomunikat("⏳ Trwa analiza Twojego treningu...")
-
 			const response = await axios.post(
 				`http://localhost:8080/api/workouts/sessions/${sessionId}/complete`,
-				{
-					spalonyKcal: parseInt(kcal),
-					czasMinuty: parseInt(czas),
-				},
+				{ spalonyKcal: parseInt(kcal), czasMinuty: parseInt(czas) },
 			)
-
 			setKomunikat("✅ " + response.data)
-			// Czyścimy pola po udanym wysłaniu
 			setSessionId("")
 			setCzas("")
 			setKcal("")
 		} catch (error) {
-			console.error("Błąd zapisu treningu:", error)
-			setKomunikat("❌ Błąd podczas zapisywania wyników.")
+			setKomunikat("❌ Błąd zapisu wyników.")
 		}
 	}
 
 	const oblicz1RM = async e => {
 		e.preventDefault()
 		try {
-			// Tu React uderza BEZPOŚREDNIO do C#, pomijając Javę, bo kalkulator jest otwarty i nie wymaga zabezpieczeń ról!
 			const response = await axios.get(
 				`http://localhost:5158/api/Calculators/1rm?ciezar=${ciezar}&powtorzenia=${powtorzenia}`,
 			)
 			setWynik1RM(response.data.maxCiezar)
 		} catch (error) {
-			console.error("Błąd kalkulatora:", error)
+			console.error("Błąd kalkulatora", error)
 		}
 	}
 
 	const zapiszRekord = async () => {
 		try {
-			setKomunikat("⏳ Zapisywanie rekordu...")
 			const response = await axios.post(
 				"http://localhost:5158/api/Workouts/records",
 				{
 					uzytkownikId: parseInt(userId),
-					cwiczenie: "Złożone (1RM)", // Domyślna nazwa ćwiczenia z kalkulatora
+					cwiczenie: "Złożone (1RM)",
 					ciezar: wynik1RM,
 				},
 			)
 			setKomunikat("✅ " + response.data)
 		} catch (error) {
-			console.error("Błąd zapisu rekordu:", error)
-			setKomunikat("❌ Nie udało się zapisać rekordu.")
+			setKomunikat("❌ Błąd zapisu rekordu.")
 		}
 	}
 
 	const kupKarnet = async nazwa => {
 		try {
-			setKomunikat(`⏳ Łączenie z operatorem płatności... Kupujesz: ${nazwa}`)
 			const response = await axios.post(
 				`http://localhost:8080/api/karnety/kup/${userId}`,
 				nazwa,
 				{ headers: { "Content-Type": "text/plain" } },
 			)
-			setKomunikat(
-				"✅ Sukces! " +
-					response.data +
-					" Wyloguj się i zaloguj ponownie, aby system odświeżył Twój dostęp!",
-			)
+			setKomunikat("✅ " + response.data + " Zaloguj się ponownie!")
 		} catch (error) {
-			setKomunikat("❌ Błąd podczas transakcji.")
+			setKomunikat("❌ Błąd transakcji.")
 		}
 	}
 
 	const kupPlan = async cel => {
 		try {
-			setKomunikat(
-				`⏳ Trwa generowanie Twojego spersonalizowanego planu: ${cel}...`,
-			)
 			await axios.post(
 				`http://localhost:8080/api/members/${userId}/training-plan`,
 				{ cel: cel, poziom: "Początkujący" },
 			)
-			setKomunikat("✅ Sukces! Plan został przypisany do Twojego profilu.")
+			setKomunikat("✅ Plan przypisany.")
 			if (isKarnetAktywny) setWidok("moje")
 		} catch (error) {
-			setKomunikat("❌ Wystąpił błąd podczas generowania planu.")
+			setKomunikat("❌ Błąd generowania planu.")
 		}
 	}
 
@@ -206,10 +231,13 @@ function PanelKlienta() {
 				style={{
 					display: "flex",
 					justifyContent: "space-between",
+					alignItems: "center",
 					padding: "0 20px",
 				}}
 			>
-				<h2 style={{ color: "#2980b9" }}>Witaj w Panelu Klienta! 🏃‍♂️</h2>
+				<h2 style={{ color: "#2980b9", margin: 0 }}>
+					Witaj w Panelu Klienta! 🏃‍♂️
+				</h2>
 				<button
 					onClick={handleLogout}
 					style={{
@@ -222,21 +250,6 @@ function PanelKlienta() {
 					}}
 				>
 					Wyloguj się
-				</button>
-
-				<button
-					onClick={() => setWidok("grafik")}
-					style={{
-						padding: "10px 20px",
-						backgroundColor: widok === "grafik" ? "#9b59b6" : "#bdc3c7",
-						color: "white",
-						border: "none",
-						borderRadius: "5px",
-						cursor: "pointer",
-						fontWeight: "bold",
-					}}
-				>
-					📅 Grafik Zajęć
 				</button>
 			</div>
 
@@ -251,18 +264,57 @@ function PanelKlienta() {
 						fontWeight: "bold",
 					}}
 				>
-					⚠️ Nie masz aktywnego karnetu! Twój dostęp jest zablokowany. Kup
-					karnet w Sklepie.
+					⚠️ Nie masz aktywnego karnetu! Kup w Sklepie.
 				</div>
 			)}
 
-			<div style={{ margin: "20px 0" }}>
+			<div
+				style={{
+					margin: "20px 0",
+					display: "flex",
+					justifyContent: "center",
+					gap: "10px",
+				}}
+			>
+				<button
+					onClick={() => setWidok("grafik")}
+					style={{
+						padding: "10px 20px",
+						backgroundColor: widok === "grafik" ? "#9b59b6" : "#bdc3c7",
+						color: "white",
+						border: "none",
+						borderRadius: "5px",
+						cursor: "pointer",
+						fontWeight: "bold",
+					}}
+				>
+					📅 Grupowe
+				</button>
+				<button
+					onClick={() => isKarnetAktywny && setWidok("trenerzy")}
+					disabled={!isKarnetAktywny}
+					style={{
+						padding: "10px 20px",
+						backgroundColor:
+							widok === "trenerzy"
+								? "#16a085"
+								: isKarnetAktywny
+									? "#bdc3c7"
+									: "#95a5a6",
+						color: "white",
+						border: "none",
+						borderRadius: "5px",
+						cursor: isKarnetAktywny ? "pointer" : "not-allowed",
+						fontWeight: "bold",
+					}}
+				>
+					⌚ Trener (1 na 1)
+				</button>
 				<button
 					onClick={() => isKarnetAktywny && setWidok("moje")}
 					disabled={!isKarnetAktywny}
 					style={{
 						padding: "10px 20px",
-						marginRight: "10px",
 						backgroundColor:
 							widok === "moje"
 								? "#2980b9"
@@ -273,12 +325,10 @@ function PanelKlienta() {
 						border: "none",
 						borderRadius: "5px",
 						cursor: isKarnetAktywny ? "pointer" : "not-allowed",
-						opacity: isKarnetAktywny ? 1 : 0.6,
+						fontWeight: "bold",
 					}}
 				>
-					{isKarnetAktywny
-						? "Moje Plany i Karnety"
-						: "🔒 Moje Plany (Zablokowane)"}
+					Moje Plany
 				</button>
 				<button
 					onClick={() => setWidok("sklep")}
@@ -289,19 +339,198 @@ function PanelKlienta() {
 						border: "none",
 						borderRadius: "5px",
 						cursor: "pointer",
+						fontWeight: "bold",
 					}}
 				>
-					🛒 Sklep (Kup Karnet / Plan)
+					🛒 Sklep
 				</button>
 			</div>
 
 			<hr style={{ width: "80%", borderColor: "#ecf0f1" }} />
 			<h3 style={{ color: "#e74c3c" }}>{komunikat}</h3>
 
+			{/* WIDOK: GRAFIK ZAJĘĆ GRUPOWYCH */}
+			{widok === "grafik" && (
+				<div style={{ marginTop: "20px" }}>
+					{/* SEKCJA: ZAPISANE ZAJĘCIA GRUPOWE (NOWE) */}
+					{isKarnetAktywny && (
+						<>
+							<h3 style={{ color: "#8e44ad" }}>Twoje zapisy na zajęcia:</h3>
+							{mojeZajecia.length === 0 ? (
+								<p style={{ color: "#7f8c8d" }}>Brak zapisów.</p>
+							) : null}
+
+							{mojeZajecia.map(rez => (
+								<div
+									key={rez.id}
+									style={{
+										border: "2px solid #8e44ad",
+										padding: "15px",
+										margin: "10px auto",
+										width: "400px",
+										borderRadius: "8px",
+										backgroundColor: "#f5eef8",
+										display: "flex",
+										justifyContent: "space-between",
+										alignItems: "center",
+									}}
+								>
+									<div style={{ textAlign: "left" }}>
+										<strong>{rez.zajeciaGrupowe.nazwa}</strong>
+										<br />
+										<span style={{ color: "#2c3e50" }}>
+											📅 {rez.zajeciaGrupowe.dataGodzina.replace("T", " ")}
+										</span>
+									</div>
+									<div style={{ color: "#8e44ad", fontWeight: "bold" }}>
+										✅ Zapisany
+									</div>
+								</div>
+							))}
+							<hr
+								style={{
+									width: "40%",
+									margin: "30px auto",
+									borderColor: "#ecf0f1",
+								}}
+							/>
+						</>
+					)}
+
+					{/* SEKCJA: DOSTĘPNE ZAJĘCIA GRUPOWE */}
+					<h3 style={{ color: "#9b59b6" }}>Dostępny grafik zajęć:</h3>
+					{zajeciaList.map(z => (
+						<div
+							key={z.id}
+							style={{
+								border: "2px solid #9b59b6",
+								padding: "15px",
+								margin: "10px auto",
+								width: "300px",
+								borderRadius: "8px",
+								backgroundColor: "#f9f2fa",
+							}}
+						>
+							<h4 style={{ margin: "0 0 10px 0" }}>{z.nazwa}</h4>
+							<p style={{ margin: "5px 0" }}>
+								Data: {z.dataGodzina.replace("T", " ")}
+							</p>
+							<button
+								onClick={() => rezerwujZajecia(z.id)}
+								style={{
+									backgroundColor: "#9b59b6",
+									color: "white",
+									border: "none",
+									padding: "8px 15px",
+									borderRadius: "5px",
+									cursor: "pointer",
+									marginTop: "10px",
+								}}
+							>
+								Zarezerwuj
+							</button>
+						</div>
+					))}
+				</div>
+			)}
+
+			{/* WIDOK: TRENERZY (1 NA 1) */}
+			{widok === "trenerzy" && isKarnetAktywny && (
+				<div style={{ marginTop: "20px" }}>
+					<h3 style={{ color: "#27ae60" }}>Twoje umówione treningi:</h3>
+					{mojeTreningi.length === 0 ? (
+						<p style={{ color: "#7f8c8d" }}>
+							Nie masz jeszcze żadnych rezerwacji.
+						</p>
+					) : null}
+
+					{mojeTreningi.map(t => (
+						<div
+							key={t.id}
+							style={{
+								border: "2px solid #27ae60",
+								padding: "15px",
+								margin: "10px auto",
+								width: "400px",
+								borderRadius: "8px",
+								backgroundColor: "#eafaf1",
+								display: "flex",
+								justifyContent: "space-between",
+								alignItems: "center",
+							}}
+						>
+							<div style={{ textAlign: "left" }}>
+								<strong>
+									Trener: {t.trener.imie} {t.trener.nazwisko}
+								</strong>
+								<br />
+								<span style={{ color: "#2c3e50" }}>
+									📅 {t.dataGodzina.replace("T", " ")}
+								</span>
+							</div>
+							<div style={{ color: "#27ae60", fontWeight: "bold" }}>
+								✅ Potwierdzony
+							</div>
+						</div>
+					))}
+
+					<hr
+						style={{
+							width: "40%",
+							margin: "30px auto",
+							borderColor: "#ecf0f1",
+						}}
+					/>
+
+					<h3 style={{ color: "#16a085" }}>Wolne terminy instruktorów:</h3>
+					{trenerzyList.length === 0 ? (
+						<p>Brak wolnych terminów na ten moment.</p>
+					) : null}
+
+					{trenerzyList.map(t => (
+						<div
+							key={t.id}
+							style={{
+								border: "2px dashed #16a085",
+								padding: "15px",
+								margin: "10px auto",
+								width: "400px",
+								borderRadius: "8px",
+								backgroundColor: "#f2fbf9",
+								display: "flex",
+								justifyContent: "space-between",
+								alignItems: "center",
+							}}
+						>
+							<div style={{ textAlign: "left" }}>
+								<strong>
+									Trener: {t.trener.imie} {t.trener.nazwisko}
+								</strong>
+								<br />
+								<span>{t.dataGodzina.replace("T", " ")}</span>
+							</div>
+							<button
+								onClick={() => rezerwujTrenera(t.id)}
+								style={{
+									backgroundColor: "#16a085",
+									color: "white",
+									border: "none",
+									padding: "8px 15px",
+									borderRadius: "5px",
+									cursor: "pointer",
+									fontWeight: "bold",
+								}}
+							>
+								Rezerwuj
+							</button>
+						</div>
+					))}
+				</div>
+			)}
+
 			{/* WIDOK: MOJE PLANY I BRAMKA */}
 			{widok === "moje" && isKarnetAktywny && (
 				<div>
-					{/* SEKCJA 1: BRAMKA WEJŚCIOWA */}
 					<div
 						style={{
 							marginTop: "20px",
@@ -349,7 +578,6 @@ function PanelKlienta() {
 
 					{czyWszedlNaSilownie && (
 						<>
-							{/* SEKCJA 2: ZAPISYWANIE WYNIKÓW TRENINGU */}
 							<div
 								style={{
 									marginTop: "20px",
@@ -374,7 +602,7 @@ function PanelKlienta() {
 								>
 									<input
 										type='number'
-										placeholder='ID Sesji (z komunikatu po wejściu)'
+										placeholder='ID Sesji'
 										value={sessionId}
 										onChange={e => setSessionId(e.target.value)}
 										required
@@ -382,7 +610,7 @@ function PanelKlienta() {
 									/>
 									<input
 										type='number'
-										placeholder='Czas w minutach (np. 60)'
+										placeholder='Czas w minutach'
 										value={czas}
 										onChange={e => setCzas(e.target.value)}
 										required
@@ -390,7 +618,7 @@ function PanelKlienta() {
 									/>
 									<input
 										type='number'
-										placeholder='Spalone kalorie (np. 600)'
+										placeholder='Spalone kalorie'
 										value={kcal}
 										onChange={e => setKcal(e.target.value)}
 										required
@@ -412,11 +640,7 @@ function PanelKlienta() {
 									</button>
 								</form>
 							</div>
-						</>
-					)}
-					{czyWszedlNaSilownie && (
-						<>
-							{/* SEKCJA KALKULATORA 1RM */}
+
 							<div
 								style={{
 									marginTop: "20px",
@@ -430,11 +654,8 @@ function PanelKlienta() {
 								}}
 							>
 								<h3 style={{ color: "#8e44ad", margin: "0 0 15px 0" }}>
-									🧮 Kalkulator Siły (1RM)
+									🧮 Kalkulator Siły
 								</h3>
-								<p style={{ fontSize: "12px", margin: "0 0 10px 0" }}>
-									Oblicz swój maksymalny ciężar na 1 powtórzenie.
-								</p>
 								<form
 									onSubmit={oblicz1RM}
 									style={{
@@ -482,29 +703,28 @@ function PanelKlienta() {
 											backgroundColor: "white",
 											borderRadius: "5px",
 											color: "#2c3e50",
-											fontWeight: "bold",
 										}}
 									>
 										<p>
-											Twój szacowany 1RM to:{" "}
-											<span style={{ color: "#e74c3c" }}>{wynik1RM} kg</span> 🏋️‍♂️
+											1RM to:{" "}
+											<span style={{ color: "#e74c3c", fontWeight: "bold" }}>
+												{wynik1RM} kg
+											</span>
 										</p>
-
 										<button
 											onClick={zapiszRekord}
 											style={{
 												width: "100%",
 												marginTop: "5px",
-												padding: "8px 10px",
+												padding: "8px",
 												backgroundColor: "#f1c40f",
-												color: "#2c3e50",
 												border: "none",
 												borderRadius: "5px",
 												cursor: "pointer",
 												fontWeight: "bold",
 											}}
 										>
-											⭐ Zapisz to jako Mój Rekord
+											⭐ Zapisz Rekord
 										</button>
 									</div>
 								)}
@@ -512,9 +732,8 @@ function PanelKlienta() {
 						</>
 					)}
 
-					{/* SEKCJA 3: LISTA PLANÓW */}
 					<h3 style={{ marginTop: "40px", color: "#2c3e50" }}>
-						Twoje aktualne plany treningowe:
+						Twoje plany treningowe:
 					</h3>
 					<div
 						style={{
@@ -536,50 +755,14 @@ function PanelKlienta() {
 									textAlign: "left",
 								}}
 							>
-								<h3 style={{ margin: "0 0 10px 0", color: "#2c3e50" }}>
-									{plan.nazwa}
-								</h3>
-								<p style={{ margin: "5px 0" }}>
+								<h3 style={{ margin: "0 0 10px 0" }}>{plan.nazwa}</h3>
+								<p>
 									<strong>Opis: </strong>
 									{plan.opis}
 								</p>
 							</div>
 						))}
 					</div>
-				</div>
-			)}
-
-			{widok === "grafik" && (
-				<div style={{ marginTop: "20px" }}>
-					<h3>Dostępne zajęcia grupowe:</h3>
-					{zajeciaList.map(z => (
-						<div
-							key={z.id}
-							style={{
-								border: "1px solid #ddd",
-								padding: "10px",
-								margin: "10px auto",
-								width: "300px",
-								borderRadius: "5px",
-							}}
-						>
-							<h4>{z.nazwa}</h4>
-							<p>Data: {z.dataGodzina.replace("T", " ")}</p>
-							<button
-								onClick={() => rezerwujZajecia(z.id)}
-								style={{
-									backgroundColor: "#9b59b6",
-									color: "white",
-									border: "none",
-									padding: "5px 10px",
-									borderRadius: "3px",
-									cursor: "pointer",
-								}}
-							>
-								Zarezerwuj
-							</button>
-						</div>
-					))}
 				</div>
 			)}
 
@@ -629,7 +812,7 @@ function PanelKlienta() {
 							backgroundColor: "#fff",
 						}}
 					>
-						<h3 style={{ color: "#d35400" }}>Plan: Szybkie Odchudzanie</h3>
+						<h3 style={{ color: "#d35400" }}>Plan Odchudzanie</h3>
 						<h2>49 PLN</h2>
 						<button
 							onClick={() => kupPlan("Odchudzanie")}
