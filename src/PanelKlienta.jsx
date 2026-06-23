@@ -22,7 +22,7 @@ function PanelKlienta() {
 	const [widok, setWidok] = useState(isKarnetAktywny ? "moje" : "sklep")
 
 	const [zajeciaList, setZajeciaList] = useState([])
-	const [mojeZajecia, setMojeZajecia] = useState([]) // NOWE: Stan na zarezerwowane zajęcia
+	const [mojeZajecia, setMojeZajecia] = useState([])
 
 	const [trenerzyList, setTrenerzyList] = useState([])
 	const [mojeTreningi, setMojeTreningi] = useState([])
@@ -34,17 +34,14 @@ function PanelKlienta() {
 			navigate("/login")
 			return
 		}
-
 		if (widok === "grafik") {
 			pobierzGrafikZajec()
 			if (isKarnetAktywny) pobierzMojeZajecia()
 		}
-
 		if (widok === "trenerzy" && isKarnetAktywny) {
 			pobierzWolnychTrenerow()
 			pobierzMojeTreningi()
 		}
-
 		if (widok === "moje" && isKarnetAktywny) {
 			axios
 				.get(`http://localhost:5158/api/Workouts/plans/${userId}`)
@@ -95,6 +92,22 @@ function PanelKlienta() {
 		}
 	}
 
+	// 🆕 NOWE: Odwoływanie treningu 1 na 1
+	const anulujTrening = async treningId => {
+		if (window.confirm("Czy na pewno chcesz odwołać ten trening personalny?")) {
+			try {
+				const response = await axios.post(
+					`http://localhost:8080/api/harmonogram/${treningId}/anuluj`,
+				)
+				setKomunikat(response.data)
+				pobierzMojeTreningi() // Odświeża moją listę
+				pobierzWolnychTrenerow() // Oddaje termin do puli
+			} catch (error) {
+				setKomunikat("❌ Błąd anulowania treningu.")
+			}
+		}
+	}
+
 	// --- FUNKCJE DLA ZAJĘĆ GRUPOWYCH ---
 	const pobierzGrafikZajec = async () => {
 		try {
@@ -114,7 +127,7 @@ function PanelKlienta() {
 			)
 			setMojeZajecia(response.data)
 		} catch (error) {
-			console.error("Błąd pobierania moich zajęć", error)
+			console.error("Błąd", error)
 		}
 	}
 
@@ -124,13 +137,30 @@ function PanelKlienta() {
 				`http://localhost:8080/api/zajecia/${idZajec}/rezerwuj?uzytkownikId=${userId}`,
 			)
 			setKomunikat(response.data)
-			pobierzMojeZajecia() // Od razu odświeżamy listę potwierdzonych zapisów!
+			pobierzMojeZajecia()
 		} catch (error) {
 			setKomunikat("❌ Błąd rezerwacji zajęć grupowych.")
 		}
 	}
 
-	// --- POZOSTAŁE FUNKCJE (BRAMKA, WYNIKI, SKLEP) ---
+	// 🆕 NOWE: Wypisywanie się z zajęć grupowych
+	const anulujZajecia = async rezerwacjaId => {
+		if (
+			window.confirm("Czy na pewno chcesz wypisać się z tych zajęć grupowych?")
+		) {
+			try {
+				const response = await axios.delete(
+					`http://localhost:8080/api/zajecia/rezerwacja/${rezerwacjaId}/anuluj`,
+				)
+				setKomunikat(response.data)
+				pobierzMojeZajecia() // Odświeża moją listę
+			} catch (error) {
+				setKomunikat("❌ Błąd podczas wypisywania się z zajęć.")
+			}
+		}
+	}
+
+	// --- POZOSTAŁE FUNKCJE ---
 	const handleLogout = () => {
 		localStorage.clear()
 		navigate("/login")
@@ -352,7 +382,6 @@ function PanelKlienta() {
 			{/* WIDOK: GRAFIK ZAJĘĆ GRUPOWYCH */}
 			{widok === "grafik" && (
 				<div style={{ marginTop: "20px" }}>
-					{/* SEKCJA: ZAPISANE ZAJĘCIA GRUPOWE (NOWE) */}
 					{isKarnetAktywny && (
 						<>
 							<h3 style={{ color: "#8e44ad" }}>Twoje zapisy na zajęcia:</h3>
@@ -382,8 +411,26 @@ function PanelKlienta() {
 											📅 {rez.zajeciaGrupowe.dataGodzina.replace("T", " ")}
 										</span>
 									</div>
-									<div style={{ color: "#8e44ad", fontWeight: "bold" }}>
-										✅ Zapisany
+									<div style={{ textAlign: "right" }}>
+										<div style={{ color: "#8e44ad", fontWeight: "bold" }}>
+											✅ Zapisany
+										</div>
+										<button
+											onClick={() => anulujZajecia(rez.id)}
+											style={{
+												backgroundColor: "#e74c3c",
+												color: "white",
+												border: "none",
+												padding: "5px 10px",
+												borderRadius: "5px",
+												cursor: "pointer",
+												marginTop: "8px",
+												fontSize: "12px",
+												fontWeight: "bold",
+											}}
+										>
+											❌ Wypisz się
+										</button>
 									</div>
 								</div>
 							))}
@@ -397,7 +444,6 @@ function PanelKlienta() {
 						</>
 					)}
 
-					{/* SEKCJA: DOSTĘPNE ZAJĘCIA GRUPOWE */}
 					<h3 style={{ color: "#9b59b6" }}>Dostępny grafik zajęć:</h3>
 					{zajeciaList.map(z => (
 						<div
@@ -468,8 +514,26 @@ function PanelKlienta() {
 									📅 {t.dataGodzina.replace("T", " ")}
 								</span>
 							</div>
-							<div style={{ color: "#27ae60", fontWeight: "bold" }}>
-								✅ Potwierdzony
+							<div style={{ textAlign: "right" }}>
+								<div style={{ color: "#27ae60", fontWeight: "bold" }}>
+									✅ Potwierdzony
+								</div>
+								<button
+									onClick={() => anulujTrening(t.id)}
+									style={{
+										backgroundColor: "#e74c3c",
+										color: "white",
+										border: "none",
+										padding: "5px 10px",
+										borderRadius: "5px",
+										cursor: "pointer",
+										marginTop: "8px",
+										fontSize: "12px",
+										fontWeight: "bold",
+									}}
+								>
+									❌ Odwołaj
+								</button>
 							</div>
 						</div>
 					))}
@@ -528,7 +592,7 @@ function PanelKlienta() {
 				</div>
 			)}
 
-			{/* WIDOK: MOJE PLANY I BRAMKA */}
+			{/* WIDOK: MOJE PLANY I BRAMKA (bez zmian) */}
 			{widok === "moje" && isKarnetAktywny && (
 				<div>
 					<div
@@ -731,7 +795,6 @@ function PanelKlienta() {
 							</div>
 						</>
 					)}
-
 					<h3 style={{ marginTop: "40px", color: "#2c3e50" }}>
 						Twoje plany treningowe:
 					</h3>
@@ -766,7 +829,7 @@ function PanelKlienta() {
 				</div>
 			)}
 
-			{/* WIDOK: SKLEP */}
+			{/* WIDOK: SKLEP (bez zmian) */}
 			{widok === "sklep" && (
 				<div
 					style={{

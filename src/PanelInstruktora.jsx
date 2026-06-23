@@ -9,26 +9,24 @@ function PanelInstruktora() {
 	const [widok, setWidok] = useState("plany")
 	const [komunikat, setKomunikat] = useState("")
 
-	// STANY: KREATOR PLANÓW
 	const [klientId, setKlientId] = useState("")
 	const [cel, setCel] = useState("Odchudzanie")
 	const [poziom, setPoziom] = useState("Początkujący")
 
-	// STANY: ZAJĘCIA GRUPOWE
 	const [nazwaZajec, setNazwaZajec] = useState("Joga")
 	const [dataGodzina, setDataGodzina] = useState("")
 	const [limitMiejsc, setLimitMiejsc] = useState(15)
+	const [zajeciaList, setZajeciaList] = useState([]) // NOWE: Lista zajęć dla instruktora
 
-	// STANY: HARMONOGRAM 1 na 1
 	const [nowyTermin, setNowyTermin] = useState("")
 	const [mojHarmonogram, setMojHarmonogram] = useState([])
 
 	useEffect(() => {
-		if (widok === "harmonogram") {
-			pobierzMojHarmonogram()
-		}
+		if (widok === "harmonogram") pobierzMojHarmonogram()
+		if (widok === "grafik") pobierzGrafikZajec() // Pobiera zajęcia gdy wchodzimy w zakładkę
 	}, [widok])
 
+	// --- FUNKCJE DLA HARMONOGRAMU 1 NA 1 ---
 	const pobierzMojHarmonogram = async () => {
 		try {
 			const response = await axios.get(
@@ -36,7 +34,7 @@ function PanelInstruktora() {
 			)
 			setMojHarmonogram(response.data)
 		} catch (error) {
-			console.error("Błąd pobierania harmonogramu", error)
+			console.error("Błąd", error)
 		}
 	}
 
@@ -51,37 +49,42 @@ function PanelInstruktora() {
 			)
 			setKomunikat(response.data)
 			setNowyTermin("")
-			pobierzMojHarmonogram() // Odświeżamy tabelkę po dodaniu
+			pobierzMojHarmonogram()
 		} catch (error) {
 			setKomunikat("❌ Błąd dodawania terminu.")
 		}
 	}
 
-	const handleLogout = () => {
-		localStorage.clear()
-		navigate("/login")
+	// 🆕 NOWE: Instruktor usuwa swój termin
+	const usunTerminPersonalny = async treningId => {
+		if (
+			window.confirm("Na pewno chcesz usunąć ten termin ze swojego grafiku?")
+		) {
+			try {
+				const response = await axios.delete(
+					`http://localhost:8080/api/harmonogram/${treningId}/usun`,
+				)
+				setKomunikat(response.data)
+				pobierzMojHarmonogram()
+			} catch (error) {
+				setKomunikat("❌ Błąd usuwania terminu.")
+			}
+		}
 	}
 
-	const handleStworzPlan = async e => {
-		/* Twój dotychczasowy kod planów */
-		e.preventDefault()
-		setKomunikat("⏳ Generowanie planu w C# (trwa komunikacja mikrousług)...")
+	// --- FUNKCJE DLA ZAJĘĆ GRUPOWYCH ---
+	const pobierzGrafikZajec = async () => {
 		try {
-			await axios.post(
-				`http://localhost:8080/api/members/${klientId}/training-plan`,
-				{ cel: cel, poziom: poziom },
+			const response = await axios.get(
+				"http://localhost:8080/api/zajecia/grafik",
 			)
-			setKomunikat(
-				"✅ Sukces! Plan został wygenerowany i przypisany do klienta.",
-			)
-			setKlientId("")
+			setZajeciaList(response.data)
 		} catch (error) {
-			setKomunikat("❌ Wystąpił błąd. Sprawdź, czy Java i C# są włączone!")
+			console.error("Błąd pobierania grafiku zajęć.")
 		}
 	}
 
 	const handleDodajZajecia = async e => {
-		/* Twój dotychczasowy kod zajęć */
 		e.preventDefault()
 		setKomunikat("⏳ Dodawanie zajęć do grafiku...")
 		try {
@@ -95,8 +98,50 @@ function PanelInstruktora() {
 			)
 			setKomunikat(response.data)
 			setDataGodzina("")
+			pobierzGrafikZajec() // Odświeża tabelkę po dodaniu
 		} catch (error) {
-			setKomunikat("❌ Błąd sieci. Serwer Java nie odpowiada.")
+			setKomunikat("❌ Błąd. Serwer Java nie odpowiada.")
+		}
+	}
+
+	// 🆕 NOWE: Instruktor usuwa całe zajęcia grupowe
+	const usunZajeciaGrupowe = async zajeciaId => {
+		if (
+			window.confirm(
+				"UWAGA: Czy na pewno chcesz całkowicie usunąć te zajęcia z systemu?",
+			)
+		) {
+			try {
+				const response = await axios.delete(
+					`http://localhost:8080/api/zajecia/${zajeciaId}/usun`,
+				)
+				setKomunikat(response.data)
+				pobierzGrafikZajec()
+			} catch (error) {
+				if (error.response) setKomunikat(error.response.data)
+			}
+		}
+	}
+
+	const handleLogout = () => {
+		localStorage.clear()
+		navigate("/login")
+	}
+
+	const handleStworzPlan = async e => {
+		e.preventDefault()
+		setKomunikat("⏳ Generowanie planu w C#...")
+		try {
+			await axios.post(
+				`http://localhost:8080/api/members/${klientId}/training-plan`,
+				{ cel: cel, poziom: poziom },
+			)
+			setKomunikat(
+				"✅ Sukces! Plan został wygenerowany i przypisany do klienta.",
+			)
+			setKlientId("")
+		} catch (error) {
+			setKomunikat("❌ Wystąpił błąd komunikacji mikrousług.")
 		}
 	}
 
@@ -132,7 +177,6 @@ function PanelInstruktora() {
 				</button>
 			</div>
 
-			{/* ZAKŁADKI */}
 			<div
 				style={{
 					margin: "20px 0",
@@ -169,8 +213,6 @@ function PanelInstruktora() {
 				>
 					📅 Grupowe
 				</button>
-
-				{/* NOWA ZAKŁADKA */}
 				<button
 					onClick={() => setWidok("harmonogram")}
 					style={{
@@ -214,7 +256,6 @@ function PanelInstruktora() {
 								onChange={e => setKlientId(e.target.value)}
 								required
 								style={{ padding: "8px", width: "90%" }}
-								placeholder='np. 2'
 							/>
 						</div>
 						<div style={{ marginBottom: "15px" }}>
@@ -263,76 +304,131 @@ function PanelInstruktora() {
 			)}
 
 			{widok === "grafik" && (
-				<div
-					style={{
-						border: "2px dashed #2980b9",
-						padding: "20px",
-						width: "350px",
-						margin: "0 auto",
-						borderRadius: "8px",
-						backgroundColor: "#f4f9fd",
-					}}
-				>
-					<h3 style={{ color: "#2980b9", marginTop: 0 }}>
-						Nowe zajęcia grupowe
-					</h3>
-					<form onSubmit={handleDodajZajecia}>
-						<div style={{ marginBottom: "15px" }}>
-							<label>Rodzaj zajęć: </label>
-							<br />
-							<select
-								value={nazwaZajec}
-								onChange={e => setNazwaZajec(e.target.value)}
-								style={{ padding: "8px", width: "95%" }}
+				<div>
+					<div
+						style={{
+							border: "2px dashed #2980b9",
+							padding: "20px",
+							width: "350px",
+							margin: "0 auto",
+							borderRadius: "8px",
+							backgroundColor: "#f4f9fd",
+						}}
+					>
+						<h3 style={{ color: "#2980b9", marginTop: 0 }}>
+							Nowe zajęcia grupowe
+						</h3>
+						<form onSubmit={handleDodajZajecia}>
+							<div style={{ marginBottom: "15px" }}>
+								<label>Rodzaj zajęć: </label>
+								<br />
+								<select
+									value={nazwaZajec}
+									onChange={e => setNazwaZajec(e.target.value)}
+									style={{ padding: "8px", width: "95%" }}
+								>
+									<option value='Joga'>🧘‍♀️ Joga</option>
+									<option value='Crossfit'>🏋️‍♂️ Crossfit</option>
+								</select>
+							</div>
+							<div style={{ marginBottom: "15px" }}>
+								<label>Data i godzina: </label>
+								<br />
+								<input
+									type='datetime-local'
+									value={dataGodzina}
+									onChange={e => setDataGodzina(e.target.value)}
+									required
+									style={{ padding: "8px", width: "90%" }}
+								/>
+							</div>
+							<div style={{ marginBottom: "20px" }}>
+								<label>Limit miejsc: </label>
+								<br />
+								<input
+									type='number'
+									value={limitMiejsc}
+									onChange={e => setLimitMiejsc(e.target.value)}
+									required
+									min='1'
+									max='50'
+									style={{ padding: "8px", width: "90%" }}
+								/>
+							</div>
+							<button
+								type='submit'
+								style={{
+									width: "100%",
+									padding: "10px",
+									cursor: "pointer",
+									backgroundColor: "#2980b9",
+									color: "white",
+									border: "none",
+									borderRadius: "5px",
+									fontWeight: "bold",
+								}}
 							>
-								<option value='Joga'>🧘‍♀️ Joga</option>
-								<option value='Crossfit'>🏋️‍♂️ Crossfit</option>
-							</select>
-						</div>
-						<div style={{ marginBottom: "15px" }}>
-							<label>Data i godzina: </label>
-							<br />
-							<input
-								type='datetime-local'
-								value={dataGodzina}
-								onChange={e => setDataGodzina(e.target.value)}
-								required
-								style={{ padding: "8px", width: "90%" }}
-							/>
-						</div>
-						<div style={{ marginBottom: "20px" }}>
-							<label>Limit miejsc: </label>
-							<br />
-							<input
-								type='number'
-								value={limitMiejsc}
-								onChange={e => setLimitMiejsc(e.target.value)}
-								required
-								min='1'
-								max='50'
-								style={{ padding: "8px", width: "90%" }}
-							/>
-						</div>
-						<button
-							type='submit'
-							style={{
-								width: "100%",
-								padding: "10px",
-								cursor: "pointer",
-								backgroundColor: "#2980b9",
-								color: "white",
-								border: "none",
-								borderRadius: "5px",
-								fontWeight: "bold",
-							}}
-						>
-							➕ Dodaj do grafiku
-						</button>
-					</form>
+								➕ Dodaj do grafiku
+							</button>
+						</form>
+					</div>
+
+					{/* 🆕 NOWE: Wyświetlanie grafiku dla instruktora z opcją usunięcia */}
+					<h3 style={{ marginTop: "30px", color: "#2980b9" }}>
+						Aktualny grafik zajęć:
+					</h3>
+					<div
+						style={{
+							display: "flex",
+							flexDirection: "column",
+							alignItems: "center",
+						}}
+					>
+						{zajeciaList.map(z => (
+							<div
+								key={z.id}
+								style={{
+									border: "1px solid #ddd",
+									padding: "15px",
+									margin: "5px",
+									width: "400px",
+									borderRadius: "5px",
+									display: "flex",
+									justifyContent: "space-between",
+									alignItems: "center",
+									backgroundColor: "#fff",
+								}}
+							>
+								<div style={{ textAlign: "left" }}>
+									<strong>{z.nazwa}</strong> ({z.limitMiejsc} miejsc)
+									<br />
+									<span style={{ color: "#7f8c8d" }}>
+										📅 {z.dataGodzina.replace("T", " ")}
+									</span>
+								</div>
+								{/* Wyświetlamy kosz tylko jeśli to zalogowany trener dodał te zajęcia */}
+								{z.trener.id === parseInt(instruktorId) && (
+									<button
+										onClick={() => usunZajeciaGrupowe(z.id)}
+										style={{
+											backgroundColor: "#e74c3c",
+											color: "white",
+											border: "none",
+											padding: "8px 12px",
+											borderRadius: "5px",
+											cursor: "pointer",
+											fontWeight: "bold",
+										}}
+									>
+										🗑️ Usuń
+									</button>
+								)}
+							</div>
+						))}
+					</div>
 				</div>
 			)}
 
-			{/* WIDOK 3: HARMONOGRAM PERSONALNY */}
 			{widok === "harmonogram" && (
 				<div>
 					<div
@@ -378,7 +474,7 @@ function PanelInstruktora() {
 						</form>
 					</div>
 
-					<h3 style={{ marginTop: "30px" }}>
+					<h3 style={{ marginTop: "30px", color: "#16a085" }}>
 						Twój aktualny grafik personalny:
 					</h3>
 					<div
@@ -399,22 +495,39 @@ function PanelInstruktora() {
 									borderRadius: "5px",
 									display: "flex",
 									justifyContent: "space-between",
+									alignItems: "center",
 									backgroundColor: h.status === "WOLNY" ? "#fff" : "#e8f8f5",
 								}}
 							>
-								<div>
-									<strong>{h.dataGodzina.replace("T", " ")}</strong>
+								<div style={{ textAlign: "left" }}>
+									<strong>📅 {h.dataGodzina.replace("T", " ")}</strong>
+									<br />
+									<span
+										style={{
+											color: h.status === "WOLNY" ? "#7f8c8d" : "#27ae60",
+											fontWeight: "bold",
+										}}
+									>
+										{h.status === "WOLNY"
+											? "Wolny"
+											: `Zajęte przez: Klient ID ${h.klient?.id}`}
+									</span>
 								</div>
-								<div
+								{/* 🆕 NOWE: Kosz do usuwania swoich terminów */}
+								<button
+									onClick={() => usunTerminPersonalny(h.id)}
 									style={{
-										color: h.status === "WOLNY" ? "#7f8c8d" : "#27ae60",
+										backgroundColor: "#e74c3c",
+										color: "white",
+										border: "none",
+										padding: "8px 12px",
+										borderRadius: "5px",
+										cursor: "pointer",
 										fontWeight: "bold",
 									}}
 								>
-									{h.status === "WOLNY"
-										? "Wolny"
-										: `Zajęte przez: Klient ID ${h.klient?.id}`}
-								</div>
+									🗑️
+								</button>
 							</div>
 						))}
 					</div>
